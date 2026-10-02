@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "DevTools Full Recorder",
+  "version": "1.1.0",
+  "description": "Records DevTools network requests and lets you search already captured Response bodies. Images and WebSockets are excluded.",
+  "devtools_page": "devtools.html"
+}

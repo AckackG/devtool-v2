@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Full Recorder</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 14px; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .title { font-size: 16px; font-weight: 700; margin-right: auto; }
+    button { border: 1px solid rgba(127,127,127,.35); border-radius: 6px; padding: 7px 11px; cursor: pointer; background: Canvas; color: CanvasText; }
+    button.primary { font-weight: 700; }
+    .stats { display: flex; gap: 18px; margin: 12px 0; font-size: 12px; opacity: .85; }
+    .hint { font-size: 12px; opacity: .7; margin-bottom: 10px; }
+    .search-box { display: flex; gap: 8px; align-items: center; margin: 12px 0 8px; flex-wrap: wrap; }
+    .search-box input[type="search"] { min-width: 320px; flex: 1 1 420px; border: 1px solid rgba(127,127,127,.35); border-radius: 6px; padding: 7px 9px; background: Canvas; color: CanvasText; font: inherit; }
+    .search-box label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; opacity: .85; user-select: none; }
+    .search-summary { font-size: 12px; margin: 0 0 8px; opacity: .82; }
+    .section-title { margin: 16px 0 8px; font-size: 13px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    th, td { border-bottom: 1px solid rgba(127,127,127,.25); padding: 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #rows-table th:nth-child(1) { width: 70px; }
+    #rows-table th:nth-child(2) { width: 65px; }
+    #rows-table th:nth-child(3) { width: 110px; }
+    #rows-table th:nth-child(4) { width: 70px; }
+    #rows-table th:nth-child(5) { width: 80px; }
+    #search-table th:nth-child(1) { width: 70px; }
+    #search-table th:nth-child(2) { width: 65px; }
+    #search-table th:nth-child(3) { width: 70px; }
+    #search-table th:nth-child(4) { width: 80px; }
+    #search-table th:nth-child(5) { width: 34%; }
+    .yes { font-weight: 700; }
+    .hidden { display: none; }
+    .snippet { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .url-cell { cursor: text; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="title">DevTools Full Recorder</div>
+    <button class="primary" id="export">一键导出全部 JSON</button>
+    <button id="clear">清空当前记录</button>
+  </div>
+  <div class="stats">
+    <span>记录：<b id="count">0</b></span>
+    <span>等待 Response Body：<b id="pending">0</b></span>
+    <span>估算 Body 大小：<b id="bytes">0 B</b></span>
+  </div>
+  <div class="hint">DevTools 打开时自动记录；关闭 DevTools 后内存记录自动消失。已排除 Image 和 WebSocket。</div>
+
+  <div class="search-box">
+    <input id="response-search" type="search" autocomplete="off" spellcheck="false" placeholder="搜索已抓取的 Response Body，例如 119.2595" />
+    <label><input id="case-sensitive" type="checkbox" /> 区分大小写</label>
+    <button class="primary" id="search-response">搜索 Response</button>
+    <button id="clear-search">清空搜索</button>
+  </div>
+  <div id="search-summary" class="search-summary">只搜索当前已经抓取到内存中的 Response Body，不重新请求网络。</div>
+
+  <div id="search-section" class="hidden">
+    <div class="section-title">Response 搜索结果</div>
+    <table id="search-table">
+      <thead>
+        <tr><th>Method</th><th>Status</th><th>命中数</th><th>Type</th><th>URL</th><th>首个命中片段</th></tr>
+      </thead>
+      <tbody id="search-rows"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">最近 100 条记录</div>
+  <div class="hint">导出包含全部记录；下表只预览最近 100 条。</div>
+  <table id="rows-table">
+    <thead>
+      <tr><th>Method</th><th>Status</th><th>Type</th><th>Req Body</th><th>Resp Body</th><th>URL</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <script src="panel.js"></script>
+</body>
+</html>
