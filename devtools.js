@@ -174,21 +174,255 @@
     updatePanel();
   }
 
-  function exportAll() {
-    const payload = {
-      format: "devtools-full-recorder-v1",
-      exported_at: new Date().toISOString(),
-      note: "Images and WebSocket requests are excluded. Data exists only for this DevTools lifetime unless exported.",
-      record_count: records.length,
-      records
-    };
+  const CRC_TABLE = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    CRC_TABLE[i] = c >>> 0;
+  }
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  function calcCrc32(buf) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) {
+      crc = CRC_TABLE[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  async function compressDeflate(buf) {
+    const cs = new CompressionStream("deflate-raw");
+    const writer = cs.writable.getWriter();
+    writer.write(buf);
+    writer.close();
+    const reader = cs.readable.getReader();
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const total = chunks.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c, offset);
+      offset += c.length;
+    }
+    return out;
+  }
+
+  function getDosDateTime(date = new Date()) {
+    const year = Math.max(1980, date.getFullYear());
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const seconds = Math.floor(date.getSeconds() / 2);
+
+    const dosTime = (hours << 11) | (minutes << 5) | seconds;
+    const dosDate = ((year - 1980) << 9) | (month << 5) | day;
+    return { dosTime, dosDate };
+  }
+
+  async function createZip(files) {
+    const fileEntries = [];
+    const encoder = new TextEncoder();
+    const { dosTime, dosDate } = getDosDateTime();
+
+    for (const f of files) {
+      const nameBytes = encoder.encode(f.name);
+      const rawBytes = typeof f.content === "string" ? encoder.encode(f.content) : f.content;
+      const crc = calcCrc32(rawBytes);
+      let compBytes = rawBytes;
+      let method = 0;
+
+      if (typeof CompressionStream !== "undefined" && rawBytes.length > 0) {
+        try {
+          const deflated = await compressDeflate(rawBytes);
+          if (deflated.length < rawBytes.length) {
+            compBytes = deflated;
+            method = 8;
+          }
+        } catch {}
+      }
+
+      fileEntries.push({
+        nameBytes,
+        rawBytes,
+        compBytes,
+        crc,
+        method,
+        size: rawBytes.length,
+        compSize: compBytes.length
+      });
+    }
+
+    let localParts = [];
+    let centralParts = [];
+    let currentOffset = 0;
+
+    for (const entry of fileEntries) {
+      entry.offset = currentOffset;
+
+      const localHeader = new Uint8Array(30 + entry.nameBytes.length);
+      const lv = new DataView(localHeader.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, entry.method, true);
+      lv.setUint16(10, dosTime, true);
+      lv.setUint16(12, dosDate, true);
+      lv.setUint32(14, entry.crc, true);
+      lv.setUint32(18, entry.compSize, true);
+      lv.setUint32(22, entry.size, true);
+      lv.setUint16(26, entry.nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      localHeader.set(entry.nameBytes, 30);
+
+      localParts.push(localHeader);
+      localParts.push(entry.compBytes);
+      currentOffset += localHeader.length + entry.compBytes.length;
+
+      const cdHeader = new Uint8Array(46 + entry.nameBytes.length);
+      const cv = new DataView(cdHeader.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0x0800, true);
+      cv.setUint16(10, entry.method, true);
+      cv.setUint16(12, dosTime, true);
+      cv.setUint16(14, dosDate, true);
+      cv.setUint32(16, entry.crc, true);
+      cv.setUint32(20, entry.compSize, true);
+      cv.setUint32(24, entry.size, true);
+      cv.setUint16(28, entry.nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, entry.offset, true);
+      cdHeader.set(entry.nameBytes, 46);
+
+      centralParts.push(cdHeader);
+    }
+
+    const centralOffset = currentOffset;
+    const centralSize = centralParts.reduce((a, b) => a + b.length, 0);
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, fileEntries.length, true);
+    ev.setUint16(10, fileEntries.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, centralOffset, true);
+    ev.setUint16(20, 0, true);
+
+    const totalLen = centralOffset + centralSize + eocd.length;
+    const finalZip = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const p of [...localParts, ...centralParts, eocd]) {
+      finalZip.set(p, pos);
+      pos += p.length;
+    }
+    return finalZip;
+  }
+
+  function getNetworkCategory(record) {
+    const type = String(record?.resourceType || "").toLowerCase().trim();
+    switch (type) {
+      case "document":
+      case "doc":
+        return "DOC";
+      case "fetch":
+        return "FETCH";
+      case "xhr":
+        return "XHR";
+      case "script":
+      case "js":
+        return "JS";
+      case "stylesheet":
+      case "css":
+        return "CSS";
+      case "font":
+        return "FONT";
+      case "media":
+        return "MEDIA";
+      case "manifest":
+        return "MANIFEST";
+      case "wasm":
+        return "WASM";
+      case "websocket":
+      case "ws":
+        return "WS";
+      case "eventsource":
+        return "EVENTSOURCE";
+      case "ping":
+        return "PING";
+      case "prefetch":
+        return "PREFETCH";
+      default: {
+        if (type) return type.toUpperCase().replace(/[^A-Z0-9_-]/g, "_");
+        const mime = String(record?.response?.content?.mimeType || "").toLowerCase();
+        if (mime.includes("html")) return "DOC";
+        if (mime.includes("json")) return "FETCH";
+        if (mime.includes("javascript")) return "JS";
+        if (mime.includes("css")) return "CSS";
+        return "OTHER";
+      }
+    }
+  }
+
+  async function exportAll() {
+    const groups = new Map();
+    for (const record of records) {
+      const cat = getNetworkCategory(record);
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat).push(record);
+    }
+
+    const files = [];
+    if (groups.size === 0) {
+      files.push({
+        name: "EMPTY.json",
+        content: JSON.stringify({
+          format: "devtools-full-recorder-v1",
+          exported_at: new Date().toISOString(),
+          category: "EMPTY",
+          note: "Images and WebSocket requests are excluded. Data exists only for this DevTools lifetime unless exported.",
+          record_count: 0,
+          records: []
+        }, null, 2)
+      });
+    } else {
+      for (const [category, catRecords] of groups.entries()) {
+        const payload = {
+          format: "devtools-full-recorder-v1",
+          exported_at: new Date().toISOString(),
+          category,
+          note: "Images and WebSocket requests are excluded. Data exists only for this DevTools lifetime unless exported.",
+          record_count: catRecords.length,
+          records: catRecords
+        };
+        files.push({
+          name: `${category}.json`,
+          content: JSON.stringify(payload, null, 2)
+        });
+      }
+    }
+
+    const zipBytes = await createZip(files);
+    const blob = new Blob([zipBytes], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     a.href = url;
-    a.download = `devtools-full-recorder-${stamp}.json`;
+    a.download = `devtools-full-recorder-${stamp}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();

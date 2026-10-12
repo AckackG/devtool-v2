@@ -92,8 +92,20 @@ function runResponseSearch() {
   renderSearch(result);
 }
 
-$("export").addEventListener("click", () => {
-  window.recorderApi?.exportAll?.();
+$("export").addEventListener("click", async () => {
+  const btn = $("export");
+  if (btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "正在导出 ZIP...";
+  try {
+    await window.recorderApi?.exportAll?.();
+  } catch (err) {
+    console.error("Export failed:", err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
 });
 
 $("clear").addEventListener("click", () => {

@@ -11,7 +11,7 @@
 - 排除 Image。
 - 排除 WebSocket。
 - 数据只放在 DevTools page 的内存中，不写 IndexedDB、不写 chrome.storage。
-- `Full Recorder` 面板可一键导出全部 JSON，或手动清空。
+- `Full Recorder` 面板可一键导出分类 ZIP（包含按 DOC、FETCH、XHR、JS、CSS 等 Network 类型分类好的 JSON），或手动清空。
 - 支持对**已经抓取到内存中的 Response Body**做全文子串搜索，不会重新请求网络；结果显示命中的请求 URL、状态、MIME、命中次数和首个命中片段。
 
 ## 安装
