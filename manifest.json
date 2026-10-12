@@ -3,5 +3,11 @@
   "name": "DevTools Full Recorder",
   "version": "1.2.0",
   "description": "Records DevTools network requests, lets you search Response bodies, and exports categorized ZIP archives by network type. Images and WebSockets are excluded.",
-  "devtools_page": "devtools.html"
+  "devtools_page": "devtools.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

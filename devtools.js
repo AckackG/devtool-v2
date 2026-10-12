@@ -526,7 +526,7 @@
     ingest(entry);
   });
 
-  chrome.devtools.panels.create("Full Recorder", "", "panel.html", (panel) => {
+  chrome.devtools.panels.create("Full Recorder", "icons/icon16.png", "panel.html", (panel) => {
     panel.onShown.addListener((win) => {
       panelWindow = win;
       try {
