@@ -1,6 +1,8 @@
 (() => {
   const records = [];
   const byKey = new Map();
+  const byId = new Map();
+  let nextRecordId = 1;
   let panelWindow = null;
   let pendingBodies = 0;
 
@@ -137,6 +139,8 @@
     if (byKey.has(key)) return;
 
     const record = buildRecord(entry);
+    record.id = nextRecordId++;
+    byId.set(record.id, record);
     byKey.set(key, record);
     records.push(record);
     updatePanel();
@@ -170,6 +174,8 @@
   function clear() {
     records.length = 0;
     byKey.clear();
+    byId.clear();
+    nextRecordId = 1;
     pendingBodies = 0;
     updatePanel();
   }
@@ -431,6 +437,7 @@
 
   function sampleRows(limit = 100) {
     return records.slice(-limit).reverse().map((record) => ({
+      id: record.id,
       method: record.request.method,
       status: record.response.status,
       type: record.resourceType || record.response.content.mimeType || "",
@@ -480,6 +487,7 @@
       if (end < body.length) snippet = `${snippet}…`;
 
       results.push({
+        id: record.id,
         method: record?.request?.method || "",
         status: record?.response?.status ?? "",
         type: record?.resourceType || record?.response?.content?.mimeType || "",
@@ -499,6 +507,10 @@
     };
   }
 
+  function getRecord(id) {
+    return byId.get(Number(id)) || null;
+  }
+
   function updatePanel() {
     if (!panelWindow) return;
     try {
@@ -512,6 +524,7 @@
     getStats: stats,
     getSampleRows: sampleRows,
     searchResponses,
+    getRecord,
     clear,
     exportAll
   };

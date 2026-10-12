@@ -36,6 +36,85 @@
     .hidden { display: none; }
     .snippet { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .url-cell { cursor: text; }
+    .clickable-row { cursor: pointer; }
+    .clickable-row:hover td { background: rgba(127,127,127,.12); }
+    .row-selected td { background: rgba(0, 112, 243, 0.15) !important; }
+
+    /* Request Details Drawer */
+    .drawer-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      backdrop-filter: blur(2px); z-index: 99; opacity: 0;
+      pointer-events: none; transition: opacity .2s ease;
+    }
+    .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 680px; max-width: 92vw; background: Canvas; color: CanvasText;
+      box-shadow: -6px 0 24px rgba(0,0,0,.35); z-index: 100;
+      display: flex; flex-direction: column; transform: translateX(100%);
+      transition: transform .22s cubic-bezier(.16, 1, .3, 1);
+      border-left: 1px solid rgba(127,127,127,.25);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid rgba(127,127,127,.2);
+      gap: 10px; background: rgba(127,127,127,.05);
+    }
+    .drawer-header-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .drawer-actions { display: flex; align-items: center; gap: 6px; }
+    .drawer-actions button { padding: 4px 8px; font-size: 11px; }
+    .close-btn { font-size: 13px; font-weight: 700; padding: 4px 8px; line-height: 1; }
+    .drawer-url-bar {
+      padding: 7px 14px; border-bottom: 1px solid rgba(127,127,127,.15);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; word-break: break-all; user-select: text;
+      background: rgba(127,127,127,.03); max-height: 52px; overflow-y: auto;
+    }
+    .drawer-tabs {
+      display: flex; border-bottom: 1px solid rgba(127,127,127,.2);
+      background: rgba(127,127,127,.04);
+    }
+    .drawer-tab {
+      flex: 1; padding: 8px 10px; border: none; border-bottom: 2px solid transparent;
+      border-radius: 0; background: transparent; font-size: 12px; font-weight: 600;
+      color: inherit; opacity: .7; cursor: pointer; text-align: center;
+    }
+    .drawer-tab:hover { opacity: 1; background: rgba(127,127,127,.08); }
+    .drawer-tab.active { opacity: 1; border-bottom-color: #0070f3; background: Canvas; }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 14px; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    .drawer-section { margin-bottom: 16px; }
+    .section-heading {
+      font-size: 11px; font-weight: 700; margin-bottom: 6px;
+      opacity: .8; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .kv-list {
+      font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(127,127,127,.04); border: 1px solid rgba(127,127,127,.2);
+      border-radius: 6px; overflow: hidden;
+    }
+    .kv-row {
+      display: flex; padding: 5px 8px; border-bottom: 1px solid rgba(127,127,127,.12);
+      word-break: break-all;
+    }
+    .kv-row:last-child { border-bottom: none; }
+    .kv-key { width: 170px; flex-shrink: 0; font-weight: 600; opacity: .82; }
+    .kv-val { flex: 1; user-select: text; }
+    .code-block {
+      margin: 0; padding: 10px; font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(127,127,127,.04); border: 1px solid rgba(127,127,127,.2);
+      border-radius: 6px; max-height: 480px; overflow: auto;
+      white-space: pre-wrap; word-break: break-all; user-select: text;
+    }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+    .badge-ok { background: rgba(46, 204, 113, .2); color: #2ecc71; }
+    .badge-redir { background: rgba(52, 152, 219, .2); color: #3498db; }
+    .badge-err { background: rgba(231, 76, 60, .2); color: #e74c3c; }
+    .badge-gray { background: rgba(127, 127, 127, .2); }
+    .empty-hint { font-size: 12px; opacity: .6; font-style: italic; padding: 6px 0; }
   </style>
 </head>
 <body>
@@ -61,6 +140,7 @@
 
   <div id="search-section" class="hidden">
     <div class="section-title">Response 搜索结果</div>
+    <div class="hint">点击任意搜索结果行，可直接展开该请求的完整 Headers、Payload 与 Response 详情。</div>
     <table id="search-table">
       <thead>
         <tr><th>Method</th><th>Status</th><th>命中数</th><th>Type</th><th>URL</th><th>首个命中片段</th></tr>
@@ -70,13 +150,89 @@
   </div>
 
   <div class="section-title">最近 100 条记录</div>
-  <div class="hint">导出包含全部记录（按类型分类为 ZIP）；下表只预览最近 100 条。</div>
+  <div class="hint">导出包含全部记录（按类型分类为 ZIP）；下表只预览最近 100 条。点击任意行可查看完整请求详情。</div>
   <table id="rows-table">
     <thead>
       <tr><th>Method</th><th>Status</th><th>Type</th><th>Req Body</th><th>Resp Body</th><th>URL</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
+
+  <!-- Backdrop -->
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+
+  <!-- Request Details Drawer -->
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="drawer-header-left">
+        <span id="d-method" class="badge badge-gray">GET</span>
+        <span id="d-status" class="badge badge-ok">200 OK</span>
+        <span id="d-type" class="badge badge-gray">fetch</span>
+      </div>
+      <div class="drawer-actions">
+        <button id="d-copy-url" title="复制完整 URL">复制 URL</button>
+        <button id="d-copy-curl" title="复制为 cURL 命令">复制 cURL</button>
+        <button id="d-copy-resp" title="复制 Response Body">复制响应体</button>
+        <button id="d-close" class="close-btn" title="关闭 (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="drawer-url-bar">
+      <span id="d-url"></span>
+    </div>
+    <div class="drawer-tabs">
+      <button class="drawer-tab active" data-tab="headers">Headers</button>
+      <button class="drawer-tab" data-tab="payload">Payload</button>
+      <button class="drawer-tab" data-tab="response">Response</button>
+      <button class="drawer-tab" data-tab="cookies">Cookies</button>
+    </div>
+    <div class="drawer-body">
+      <!-- Headers Tab -->
+      <div id="tab-headers" class="tab-pane active">
+        <div class="drawer-section">
+          <div class="section-heading">General</div>
+          <div class="kv-list" id="d-general-kv"></div>
+        </div>
+        <div class="drawer-section">
+          <div class="section-heading">Response Headers</div>
+          <div class="kv-list" id="d-resp-headers-kv"></div>
+        </div>
+        <div class="drawer-section">
+          <div class="section-heading">Request Headers</div>
+          <div class="kv-list" id="d-req-headers-kv"></div>
+        </div>
+      </div>
+      <!-- Payload Tab -->
+      <div id="tab-payload" class="tab-pane">
+        <div class="drawer-section">
+          <div class="section-heading">Query String Parameters</div>
+          <div class="kv-list" id="d-query-kv"></div>
+        </div>
+        <div class="drawer-section">
+          <div class="section-heading">Request Body (Payload)</div>
+          <pre id="d-payload-text" class="code-block"></pre>
+        </div>
+      </div>
+      <!-- Response Tab -->
+      <div id="tab-response" class="tab-pane">
+        <div class="drawer-section">
+          <div class="section-heading" id="d-resp-meta">Response Body</div>
+          <pre id="d-response-text" class="code-block"></pre>
+        </div>
+      </div>
+      <!-- Cookies Tab -->
+      <div id="tab-cookies" class="tab-pane">
+        <div class="drawer-section">
+          <div class="section-heading">Response Cookies</div>
+          <div class="kv-list" id="d-resp-cookies-kv"></div>
+        </div>
+        <div class="drawer-section">
+          <div class="section-heading">Request Cookies</div>
+          <div class="kv-list" id="d-req-cookies-kv"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
   <script src="panel.js"></script>
 </body>
 </html>
