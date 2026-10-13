@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1F232B"/>
+      <stop offset="100%" stop-color="#13161D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="8" y="8" width="112" height="112" rx="30" fill="url(#bgGrad)"/>
+
+  <!-- Chrome Red Record Disc -->
+  <circle cx="64" cy="64" r="44" fill="#EA4335"/>
+
+  <!-- Request Arrow (Top: ->) -->
+  <rect x="39" y="49" width="37.5" height="7.5" rx="3.75" fill="#FFFFFF"/>
+  <polygon points="89,52.75 72.75,42.2 72.75,63.3" fill="#FFFFFF"/>
+
+  <!-- Response Arrow (Bottom: <-) -->
+  <rect x="51.5" y="71.5" width="37.5" height="7.5" rx="3.75" fill="#FFFFFF"/>
+  <polygon points="39,75.25 55.25,64.7 55.25,85.8" fill="#FFFFFF"/>
+</svg>
