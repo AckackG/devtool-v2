@@ -129,14 +129,17 @@
   <div class="top">
     <div class="title"><img src="icons/icon32.png" alt="logo" class="logo" />DevTools Full Recorder</div>
     <button class="primary" id="export">一键导出分类 ZIP</button>
+    <button id="sync-har" title="立即从 DevTools HAR 日志补抓遗漏的请求">同步 HAR</button>
     <button id="clear">清空当前记录</button>
   </div>
   <div class="stats">
     <span>记录：<b id="count">0</b></span>
     <span>等待 Response Body：<b id="pending">0</b></span>
     <span>估算 Body 大小：<b id="bytes">0 B</b></span>
+    <span title="Chrome 推送给本扩展的网络完成事件数量；排除数为 Image/WebSocket">网络事件：<b id="events">0</b>（排除 <b id="excluded">0</b>）</span>
   </div>
-  <div class="hint">DevTools 打开时自动记录；关闭 DevTools 后内存记录自动消失。已排除 Image 和 WebSocket。</div>
+  <div id="event-types" class="hint"></div>
+  <div class="hint">DevTools 打开时自动记录；关闭 DevTools 后内存记录自动消失。已排除 Image 和 WebSocket。若 Fetch/XHR 未出现，请先切换一次 Network 面板激活 Chrome 网络事件，本面板也会每 10 秒从 HAR 补抓。</div>
 
   <div class="search-box">
     <input id="response-search" type="search" autocomplete="off" spellcheck="false" placeholder="同时搜索 URL 与 Response Body，例如 119.2595 / api/user" />

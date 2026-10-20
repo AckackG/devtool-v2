@@ -5,6 +5,13 @@
   let nextRecordId = 1;
   let panelWindow = null;
   let pendingBodies = 0;
+  let liveEventsReceived = 0;
+  let liveEventsExcluded = 0;
+  let excludedImages = 0;
+  let excludedWebSockets = 0;
+  let excludedNoRequest = 0;
+  let lastHARSync = { entries: 0, added: 0, at: null };
+  const liveEventTypeCounts = {};
 
   function resourceTypeOf(entry) {
     return String(entry?._resourceType || entry?.resourceType || "").toLowerCase();
@@ -15,8 +22,9 @@
   }
 
   function isWebSocket(entry) {
-    const url = String(entry?.request?.url || "");
     const type = resourceTypeOf(entry);
+    if (type === "fetch" || type === "xhr") return false;
+    const url = String(entry?.request?.url || "");
     if (/^wss?:/i.test(url)) return true;
     if (type === "websocket") return true;
     if (Number(entry?.response?.status) === 101) {
@@ -27,13 +35,7 @@
   }
 
   function isImage(entry) {
-    const type = resourceTypeOf(entry);
-    const mime = mimeTypeOf(entry);
-    return type === "image" || mime.startsWith("image/");
-  }
-
-  function shouldExclude(entry) {
-    return isWebSocket(entry) || isImage(entry);
+    return resourceTypeOf(entry) === "image";
   }
 
   function makeKey(entry) {
@@ -132,14 +134,60 @@
     callback(content.text ?? null, content.encoding || null);
   }
 
-  function ingest(entry) {
-    if (!entry?.request || shouldExclude(entry)) return;
+  function ingest(entry, source = "har") {
+    if (source === "event") {
+      liveEventsReceived += 1;
+      const eventType = resourceTypeOf(entry) || "unknown";
+      liveEventTypeCounts[eventType] = (liveEventTypeCounts[eventType] || 0) + 1;
+    }
+
+    if (!entry?.request) {
+      if (source === "event") {
+        liveEventsExcluded += 1;
+        excludedNoRequest += 1;
+      }
+      return false;
+    }
+    if (isWebSocket(entry)) {
+      if (source === "event") {
+        liveEventsExcluded += 1;
+        excludedWebSockets += 1;
+      }
+      return false;
+    }
+    if (isImage(entry)) {
+      if (source === "event") {
+        liveEventsExcluded += 1;
+        excludedImages += 1;
+      }
+      return false;
+    }
 
     const key = makeKey(entry);
-    if (byKey.has(key)) return;
+    if (byKey.has(key)) return false;
+
+    const startMs = Date.parse(entry.startedDateTime || "") || Date.now();
+    const existing = findNearbyRecord(entry.request.method, entry.request.url, startMs);
+    if (existing && existing._captureSource === "webRequest") {
+      const id = existing.id;
+      const requestId = existing._requestId;
+      const real = buildRecord(entry);
+      Object.assign(existing, real, { id, _captureSource: "devtools" });
+      if (requestId) existing._requestId = requestId;
+      byId.set(id, existing);
+      byKey.set(key, existing);
+      updatePanel();
+      getResponseBody(entry, (body, encoding) => {
+        existing.response.content.text = body;
+        existing.response.content.encoding = encoding;
+        updatePanel();
+      });
+      return false;
+    }
 
     const record = buildRecord(entry);
     record.id = nextRecordId++;
+    record._captureSource = "devtools";
     byId.set(record.id, record);
     byKey.set(key, record);
     records.push(record);
@@ -150,6 +198,53 @@
       record.response.content.encoding = encoding;
       updatePanel();
     });
+    return true;
+  }
+
+  function findNearbyRecord(method, url, startMs) {
+    const toleranceMs = 10000;
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i];
+      if (record?.request?.method !== method || record?.request?.url !== url) continue;
+      const time = Date.parse(record.startedDateTime || record.captured_at || "");
+      if (Number.isFinite(time) && Math.abs(time - startMs) <= toleranceMs) return record;
+    }
+    return null;
+  }
+
+  function ingestExternal(entry) {
+    if (!entry?.request?.url) return false;
+    const method = entry.request.method || "GET";
+    const url = entry.request.url;
+    const startMs = Date.parse(entry.startedDateTime || "") || Date.now();
+    const requestId = entry._requestId || null;
+
+    if (requestId) {
+      for (let i = records.length - 1; i >= 0; i--) {
+        const record = records[i];
+        if (record._requestId !== requestId) continue;
+        const body = record.response?.content?.text ?? null;
+        const encoding = record.response?.content?.encoding ?? null;
+        record.response = buildRecord(entry).response;
+        record.response.content.text = body;
+        record.response.content.encoding = encoding;
+        updatePanel();
+        return false;
+      }
+    }
+
+    const existing = findNearbyRecord(method, url, startMs);
+    if (existing && existing._captureSource === "devtools") return false;
+
+    const record = buildRecord(entry);
+    record.id = nextRecordId++;
+    record._captureSource = "webRequest";
+    if (requestId) record._requestId = requestId;
+    byId.set(record.id, record);
+    byKey.set(makeKey(entry), record);
+    records.push(record);
+    updatePanel();
+    return true;
   }
 
   function estimateBytes() {
@@ -177,7 +272,15 @@
       count: records.length,
       pendingBodies,
       approxBytes: estimateBytes(),
-      categoryCounts: categoryCounts()
+      categoryCounts: categoryCounts(),
+      liveEventsReceived,
+      liveEventsExcluded,
+      excludedImages,
+      excludedWebSockets,
+      excludedNoRequest,
+      liveEventTypeCounts,
+      lastHARSync,
+      webRequestCount: records.reduce((count, record) => count + (record._captureSource === "webRequest" ? 1 : 0), 0)
     };
   }
 
@@ -450,7 +553,7 @@
       id: record.id,
       method: record.request.method,
       status: record.response.status,
-      type: record.resourceType || record.response.content.mimeType || "",
+      type: getNetworkCategory(record),
       category: getNetworkCategory(record),
       url: record.request.url,
       responseBytes: record.response.bodySize ?? record.response.content.size ?? null,
@@ -527,7 +630,7 @@
         id: record.id,
         method: record?.request?.method || "",
         status: record?.response?.status ?? "",
-        type: record?.resourceType || record?.response?.content?.mimeType || "",
+        type: getNetworkCategory(record),
         category: getNetworkCategory(record),
         url,
         matchCount,
@@ -555,8 +658,8 @@
     if (!panelWindow) return;
     try {
       panelWindow.updateRecorderView?.(stats(), sampleRows());
-    } catch {
-      panelWindow = null;
+    } catch (err) {
+      console.error("Full Recorder panel update failed:", err);
     }
   }
 
@@ -566,17 +669,95 @@
     searchResponses,
     getRecord,
     clear,
-    exportAll
+    exportAll,
+    syncHAR
   };
 
-  chrome.devtools.network.getHAR((har) => {
+  let harSyncInFlight = false;
+  let harSyncTimer = null;
+
+  function readHAR() {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer = null;
+      const finish = (har) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(har || null);
+      };
+
+      timer = setTimeout(() => finish(null), 5000);
+
+      const tryCallback = () => {
+        try {
+          chrome.devtools.network.getHAR((har) => finish(har));
+        } catch {
+          finish(null);
+        }
+      };
+
+      try {
+        const maybePromise = chrome.devtools.network.getHAR();
+        if (maybePromise && typeof maybePromise.then === "function") {
+          maybePromise.then(finish).catch(tryCallback);
+        } else {
+          tryCallback();
+        }
+      } catch {
+        tryCallback();
+      }
+    });
+  }
+
+  async function syncHAR() {
+    if (harSyncInFlight) return;
+    harSyncInFlight = true;
     try {
-      for (const entry of har?.entries || []) ingest(entry);
-    } catch {}
-  });
+      const har = await readHAR();
+      if (!har) {
+        lastHARSync = { entries: 0, added: 0, at: new Date().toISOString() };
+        return null;
+      }
+      const entries = har.entries || [];
+      let added = 0;
+      for (const entry of entries) {
+        if (ingest(entry, "har")) added += 1;
+      }
+      lastHARSync = { entries: entries.length, added, at: new Date().toISOString() };
+      updatePanel();
+      return lastHARSync;
+    } catch (err) {
+      console.error("Full Recorder HAR sync failed:", err);
+      return null;
+    } finally {
+      harSyncInFlight = false;
+    }
+  }
+
+  let capturePort = null;
+
+  function connectCapturePort() {
+    try {
+      capturePort = chrome.runtime.connect({ name: "full-recorder-capture" });
+      capturePort.postMessage({ type: "init", tabId: chrome.devtools.inspectedWindow.tabId });
+      capturePort.onMessage.addListener((message) => {
+        if (message?.type === "xhr" && message.entry) ingestExternal(message.entry);
+      });
+      capturePort.onDisconnect.addListener(() => {
+        capturePort = null;
+        setTimeout(connectCapturePort, 1000);
+      });
+    } catch (err) {
+      console.error("Full Recorder webRequest fallback unavailable:", err);
+    }
+  }
+
+  syncHAR();
+  connectCapturePort();
 
   chrome.devtools.network.onRequestFinished.addListener((entry) => {
-    ingest(entry);
+    ingest(entry, "event");
   });
 
   chrome.devtools.panels.create("Full Recorder", "icons/icon16.png", "panel.html", (panel) => {
@@ -585,11 +766,20 @@
       try {
         win.recorderApi = api;
         win.updateRecorderView?.(stats(), sampleRows());
-      } catch {}
+      } catch (err) {
+        console.error("Full Recorder panel init failed:", err);
+      }
+      syncHAR();
+      if (!capturePort) connectCapturePort();
+      if (harSyncTimer) clearInterval(harSyncTimer);
+      harSyncTimer = setInterval(syncHAR, 10000);
     });
 
     panel.onHidden.addListener(() => {
-      panelWindow = null;
+      if (harSyncTimer) {
+        clearInterval(harSyncTimer);
+        harSyncTimer = null;
+      }
     });
   });
 })();
