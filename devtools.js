@@ -163,11 +163,21 @@
     return bytes;
   }
 
+  function categoryCounts() {
+    const counts = {};
+    for (const record of records) {
+      const cat = getNetworkCategory(record);
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return counts;
+  }
+
   function stats() {
     return {
       count: records.length,
       pendingBodies,
-      approxBytes: estimateBytes()
+      approxBytes: estimateBytes(),
+      categoryCounts: categoryCounts()
     };
   }
 
@@ -344,7 +354,7 @@
     switch (type) {
       case "document":
       case "doc":
-        return "DOC";
+        return "HTML";
       case "fetch":
         return "FETCH";
       case "xhr":
@@ -375,7 +385,7 @@
       default: {
         if (type) return type.toUpperCase().replace(/[^A-Z0-9_-]/g, "_");
         const mime = String(record?.response?.content?.mimeType || "").toLowerCase();
-        if (mime.includes("html")) return "DOC";
+        if (mime.includes("html")) return "HTML";
         if (mime.includes("json")) return "FETCH";
         if (mime.includes("javascript")) return "JS";
         if (mime.includes("css")) return "CSS";
@@ -441,6 +451,7 @@
       method: record.request.method,
       status: record.response.status,
       type: record.resourceType || record.response.content.mimeType || "",
+      category: getNetworkCategory(record),
       url: record.request.url,
       responseBytes: record.response.bodySize ?? record.response.content.size ?? null,
       hasRequestBody: Boolean(record.request.postData?.text),
@@ -448,51 +459,79 @@
     }));
   }
 
+  function countOccurrences(haystack, needle) {
+    let count = 0;
+    let from = 0;
+    while (true) {
+      const found = haystack.indexOf(needle, from);
+      if (found < 0) break;
+      count += 1;
+      from = found + Math.max(needle.length, 1);
+    }
+    return count;
+  }
+
+  function makeSnippet(text, index, needleLength, context = 120) {
+    const start = Math.max(0, index - context);
+    const end = Math.min(text.length, index + needleLength + context);
+    let snippet = text.slice(start, end).replace(/[\r\n\t]+/g, " ");
+    if (start > 0) snippet = `…${snippet}`;
+    if (end < text.length) snippet = `${snippet}…`;
+    return snippet;
+  }
+
   function searchResponses(query, options = {}) {
     const rawNeedle = String(query ?? "");
     if (!rawNeedle) {
-      return { query: rawNeedle, scanned: 0, matchedRecords: 0, totalMatches: 0, results: [] };
+      return { query: rawNeedle, scannedRecords: 0, scannedBodies: 0, matchedRecords: 0, totalMatches: 0, results: [] };
     }
 
     const caseSensitive = Boolean(options.caseSensitive);
     const needle = caseSensitive ? rawNeedle : rawNeedle.toLowerCase();
     const results = [];
-    let scanned = 0;
+    let scannedBodies = 0;
     let totalMatches = 0;
 
     for (const record of records) {
+      const url = String(record?.request?.url || "");
+      const urlHaystack = caseSensitive ? url : url.toLowerCase();
+      const urlIndex = urlHaystack.indexOf(needle);
+      const urlMatches = urlIndex >= 0 ? countOccurrences(urlHaystack, needle) : 0;
+
       const body = record?.response?.content?.text;
-      if (typeof body !== "string") continue;
-      scanned += 1;
-
-      const haystack = caseSensitive ? body : body.toLowerCase();
-      let index = haystack.indexOf(needle);
-      if (index < 0) continue;
-
-      let matchCount = 0;
-      let from = 0;
-      while (true) {
-        const found = haystack.indexOf(needle, from);
-        if (found < 0) break;
-        matchCount += 1;
-        from = found + Math.max(needle.length, 1);
+      let bodyMatches = 0;
+      let bodyIndex = -1;
+      if (typeof body === "string") {
+        scannedBodies += 1;
+        const bodyHaystack = caseSensitive ? body : body.toLowerCase();
+        bodyIndex = bodyHaystack.indexOf(needle);
+        if (bodyIndex >= 0) bodyMatches = countOccurrences(bodyHaystack, needle);
       }
+
+      if (urlMatches === 0 && bodyMatches === 0) continue;
+
+      const matchCount = urlMatches + bodyMatches;
       totalMatches += matchCount;
 
-      const context = 120;
-      const start = Math.max(0, index - context);
-      const end = Math.min(body.length, index + rawNeedle.length + context);
-      let snippet = body.slice(start, end).replace(/[\r\n\t]+/g, " ");
-      if (start > 0) snippet = `…${snippet}`;
-      if (end < body.length) snippet = `${snippet}…`;
+      let source;
+      let snippet;
+      if (urlMatches > 0) {
+        source = bodyMatches > 0 ? "URL + Response" : "URL";
+        snippet = makeSnippet(url, urlIndex, rawNeedle.length);
+      } else {
+        source = "Response";
+        snippet = makeSnippet(body, bodyIndex, rawNeedle.length);
+      }
 
       results.push({
         id: record.id,
         method: record?.request?.method || "",
         status: record?.response?.status ?? "",
         type: record?.resourceType || record?.response?.content?.mimeType || "",
-        url: record?.request?.url || "",
+        category: getNetworkCategory(record),
+        url,
         matchCount,
+        source,
         snippet
       });
     }
@@ -500,7 +539,8 @@
     results.reverse();
     return {
       query: rawNeedle,
-      scanned,
+      scannedRecords: records.length,
+      scannedBodies,
       matchedRecords: results.length,
       totalMatches,
       results

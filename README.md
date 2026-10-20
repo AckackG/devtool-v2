@@ -11,8 +11,9 @@
 - 排除 Image。
 - 排除 WebSocket。
 - 数据只放在 DevTools page 的内存中，不写 IndexedDB、不写 chrome.storage。
-- `Full Recorder` 面板可一键导出分类 ZIP（包含按 DOC、FETCH、XHR、JS、CSS 等 Network 类型分类好的 JSON），或手动清空。
-- 支持对**已经抓取到内存中的 Response Body**做全文子串搜索，不会重新请求网络；结果显示命中的请求 URL、状态、MIME、命中次数和首个命中片段。
+- `Full Recorder` 面板可一键导出分类 ZIP（包含按 HTML、FETCH、XHR、JS、CSS 等 Network 类型分类好的 JSON），或手动清空。
+- 提供类似 DevTools Network 的类型筛选栏（ALL、FETCH、JS、HTML、CSS 等多选组合），列表与搜索结果会同步按所选类型过滤。
+- 支持对**已经抓取到内存中的 URL 与 Response Body**做全文子串搜索，不会重新请求网络；结果显示命中位置（URL / Response / URL + Response）、请求 URL、状态、MIME、命中次数和首个命中片段。
 - **点击搜索结果或列表记录任意行**，可直接展开**请求详情抽屉**，查看 Headers、Payload（Query/PostData）、Response Body（支持格式化与一键复制）、Cookies 以及一键复制 cURL 命令。
 
 ## 安装

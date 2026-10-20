@@ -19,6 +19,13 @@
     .search-box input[type="search"] { min-width: 320px; flex: 1 1 420px; border: 1px solid rgba(127,127,127,.35); border-radius: 6px; padding: 7px 9px; background: Canvas; color: CanvasText; font: inherit; }
     .search-box label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; opacity: .85; user-select: none; }
     .search-summary { font-size: 12px; margin: 0 0 8px; opacity: .82; }
+    .filter-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 12px 0 4px; }
+    .filter-label { font-size: 12px; opacity: .7; margin-right: 2px; }
+    .filter-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(127,127,127,.35); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 600; background: Canvas; color: CanvasText; cursor: pointer; }
+    .filter-chip:hover { background: rgba(127,127,127,.1); }
+    .filter-chip.active { background: #0070f3; border-color: #0070f3; color: #fff; }
+    .filter-chip .count { font-size: 10px; font-weight: 400; opacity: .72; }
+    .filter-summary { font-size: 12px; margin: 0 0 8px; opacity: .72; }
     .section-title { margin: 16px 0 8px; font-size: 13px; font-weight: 700; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
     th, td { border-bottom: 1px solid rgba(127,127,127,.25); padding: 6px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -27,11 +34,12 @@
     #rows-table th:nth-child(3) { width: 110px; }
     #rows-table th:nth-child(4) { width: 70px; }
     #rows-table th:nth-child(5) { width: 80px; }
-    #search-table th:nth-child(1) { width: 70px; }
-    #search-table th:nth-child(2) { width: 65px; }
-    #search-table th:nth-child(3) { width: 70px; }
-    #search-table th:nth-child(4) { width: 80px; }
-    #search-table th:nth-child(5) { width: 34%; }
+    #search-table th:nth-child(1) { width: 65px; }
+    #search-table th:nth-child(2) { width: 60px; }
+    #search-table th:nth-child(3) { width: 55px; }
+    #search-table th:nth-child(4) { width: 90px; }
+    #search-table th:nth-child(5) { width: 70px; }
+    #search-table th:nth-child(6) { width: 30%; }
     .yes { font-weight: 700; }
     .hidden { display: none; }
     .snippet { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -131,19 +139,24 @@
   <div class="hint">DevTools 打开时自动记录；关闭 DevTools 后内存记录自动消失。已排除 Image 和 WebSocket。</div>
 
   <div class="search-box">
-    <input id="response-search" type="search" autocomplete="off" spellcheck="false" placeholder="搜索已抓取的 Response Body，例如 119.2595" />
+    <input id="response-search" type="search" autocomplete="off" spellcheck="false" placeholder="同时搜索 URL 与 Response Body，例如 119.2595 / api/user" />
     <label><input id="case-sensitive" type="checkbox" /> 区分大小写</label>
-    <button class="primary" id="search-response">搜索 Response</button>
+    <button class="primary" id="search-response">搜索 URL + Response</button>
     <button id="clear-search">清空搜索</button>
   </div>
-  <div id="search-summary" class="search-summary">只搜索当前已经抓取到内存中的 Response Body，不重新请求网络。</div>
+  <div id="search-summary" class="search-summary">同时搜索当前已经抓取到内存中的 URL 与 Response Body，不重新请求网络。</div>
+
+  <div class="filter-bar" id="filter-bar">
+    <span class="filter-label">筛选类型：</span>
+  </div>
+  <div id="filter-summary" class="filter-summary">当前显示全部类型。点击多个类型可组合筛选，点击 ALL 恢复全部。</div>
 
   <div id="search-section" class="hidden">
-    <div class="section-title">Response 搜索结果</div>
-    <div class="hint">点击任意搜索结果行，可直接展开该请求的完整 Headers、Payload 与 Response 详情。</div>
+    <div class="section-title">URL + Response 搜索结果</div>
+    <div class="hint">命中位置会标记 URL、Response 或 URL + Response；点击任意结果行可展开完整 Headers、Payload 与 Response 详情。</div>
     <table id="search-table">
       <thead>
-        <tr><th>Method</th><th>Status</th><th>命中数</th><th>Type</th><th>URL</th><th>首个命中片段</th></tr>
+        <tr><th>Method</th><th>Status</th><th>命中数</th><th>命中位置</th><th>Type</th><th>URL</th><th>首个命中片段</th></tr>
       </thead>
       <tbody id="search-rows"></tbody>
     </table>

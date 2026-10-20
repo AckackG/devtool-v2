@@ -1,6 +1,79 @@
 const $ = (id) => document.getElementById(id);
 
+const CATEGORY_ORDER = ["FETCH", "XHR", "JS", "HTML", "CSS", "FONT", "MEDIA", "WASM", "MANIFEST", "EVENTSOURCE", "PING", "PREFETCH", "OTHER"];
+const activeCategories = new Set();
+
 let currentDrawerRecord = null;
+let lastRows = [];
+let lastSearchResult = null;
+let lastCategoryCounts = {};
+
+function matchesCategoryFilter(row) {
+  if (activeCategories.size === 0) return true;
+  return activeCategories.has(row?.category || "OTHER");
+}
+
+function sortedCategoryNames(counts) {
+  return Object.keys(counts || {}).sort((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a);
+    const bi = CATEGORY_ORDER.indexOf(b);
+    if (ai !== bi) return (ai < 0 ? CATEGORY_ORDER.length : ai) - (bi < 0 ? CATEGORY_ORDER.length : bi);
+    return a.localeCompare(b);
+  });
+}
+
+function createFilterChip(name, count, active, onClick) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = `filter-chip${active ? " active" : ""}`;
+  chip.dataset.category = name;
+  chip.setAttribute("aria-pressed", String(active));
+
+  const label = document.createElement("span");
+  label.textContent = name;
+  const countEl = document.createElement("span");
+  countEl.className = "count";
+  countEl.textContent = Number(count || 0).toLocaleString();
+
+  chip.appendChild(label);
+  chip.appendChild(countEl);
+  chip.addEventListener("click", onClick);
+  return chip;
+}
+
+function renderFilterBar(counts) {
+  const bar = $("filter-bar");
+  bar.textContent = "";
+  const label = document.createElement("span");
+  label.className = "filter-label";
+  label.textContent = "筛选类型：";
+  bar.appendChild(label);
+
+  const total = Object.values(counts || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+  bar.appendChild(createFilterChip("ALL", total, activeCategories.size === 0, () => {
+    activeCategories.clear();
+    refreshViews();
+  }));
+
+  for (const name of sortedCategoryNames(counts)) {
+    if (!Number(counts[name])) continue;
+    bar.appendChild(createFilterChip(name, counts[name], activeCategories.has(name), () => {
+      if (activeCategories.has(name)) activeCategories.delete(name);
+      else activeCategories.add(name);
+      refreshViews();
+    }));
+  }
+
+  $("filter-summary").textContent = activeCategories.size === 0
+    ? "当前显示全部类型。点击多个类型可组合筛选，点击 ALL 恢复全部。"
+    : `当前筛选：${[...activeCategories].join("、")}。搜索与列表均只显示所选类型，点击 ALL 恢复全部。`;
+}
+
+function refreshViews() {
+  renderFilterBar(lastCategoryCounts);
+  renderRows(lastRows);
+  renderSearch(lastSearchResult);
+}
 
 function formatBytes(bytes) {
   const value = Number(bytes || 0);
@@ -170,14 +243,23 @@ function closeDrawer() {
   currentDrawerRecord = null;
 }
 
-window.updateRecorderView = (stats, rows) => {
-  $("count").textContent = Number(stats?.count || 0).toLocaleString();
-  $("pending").textContent = Number(stats?.pendingBodies || 0).toLocaleString();
-  $("bytes").textContent = formatBytes(stats?.approxBytes || 0);
-
+function renderRows(rows) {
   const tbody = $("rows");
   tbody.textContent = "";
-  for (const row of rows || []) {
+  const visibleRows = (rows || []).filter(matchesCategoryFilter);
+
+  if (visibleRows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.textContent = (rows || []).length === 0 ? "暂无记录" : "当前筛选条件下没有记录";
+    td.className = "empty-hint";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const row of visibleRows) {
     const tr = document.createElement("tr");
     tr.classList.add("clickable-row");
     tr.title = "点击查看该请求完整详情";
@@ -203,25 +285,54 @@ window.updateRecorderView = (stats, rows) => {
     });
     tbody.appendChild(tr);
   }
+}
+
+window.updateRecorderView = (stats, rows) => {
+  $("count").textContent = Number(stats?.count || 0).toLocaleString();
+  $("pending").textContent = Number(stats?.pendingBodies || 0).toLocaleString();
+  $("bytes").textContent = formatBytes(stats?.approxBytes || 0);
+
+  lastRows = rows || [];
+  lastCategoryCounts = stats?.categoryCounts || {};
+  refreshViews();
 };
 
 function renderSearch(result) {
+  lastSearchResult = result || null;
   const section = $("search-section");
   const tbody = $("search-rows");
   tbody.textContent = "";
 
   if (!result?.query) {
     section.classList.add("hidden");
-    $("search-summary").textContent = "只搜索当前已经抓取到内存中的 Response Body，不重新请求网络。";
+    $("search-summary").textContent = "同时搜索当前已经抓取到内存中的 URL 与 Response Body，不重新请求网络。";
     return;
   }
 
   section.classList.remove("hidden");
+  const visibleResults = (result.results || []).filter(matchesCategoryFilter);
+  const visibleMatches = visibleResults.reduce((sum, row) => sum + Number(row.matchCount || 0), 0);
+  const filterNote = activeCategories.size > 0
+    ? `当前筛选显示 ${visibleResults.length.toLocaleString()} 个请求、${visibleMatches.toLocaleString()} 处命中。`
+    : "";
   $("search-summary").textContent =
-    `已扫描 ${Number(result.scanned || 0).toLocaleString()} 个已有 Response Body；` +
-    `命中 ${Number(result.matchedRecords || 0).toLocaleString()} 个请求，共 ${Number(result.totalMatches || 0).toLocaleString()} 处。点击结果可直接查看详情。`;
+    `已扫描 ${Number(result.scannedRecords || 0).toLocaleString()} 条记录的 URL 与 ` +
+    `${Number(result.scannedBodies || 0).toLocaleString()} 个 Response Body；` +
+    `命中 ${Number(result.matchedRecords || 0).toLocaleString()} 个请求，共 ${Number(result.totalMatches || 0).toLocaleString()} 处。` +
+    `${filterNote}点击结果可直接查看详情。`;
 
-  for (const row of result.results || []) {
+  if (visibleResults.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.textContent = "当前筛选条件下没有匹配结果";
+    td.className = "empty-hint";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const row of visibleResults) {
     const tr = document.createElement("tr");
     tr.classList.add("clickable-row");
     tr.title = "点击查看该请求完整详情与 Response";
@@ -231,6 +342,7 @@ function renderSearch(result) {
       row.method || "",
       row.status ?? "",
       row.matchCount ?? 0,
+      row.source || "",
       row.type || "",
       row.url || "",
       row.snippet || ""
@@ -240,8 +352,8 @@ function renderSearch(result) {
       const td = document.createElement("td");
       td.textContent = String(value);
       td.title = String(value);
-      if (index === 4) td.classList.add("url-cell");
-      if (index === 5) td.classList.add("snippet");
+      if (index === 5) td.classList.add("url-cell");
+      if (index === 6) td.classList.add("snippet");
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -279,6 +391,7 @@ $("export").addEventListener("click", async () => {
 });
 
 $("clear").addEventListener("click", () => {
+  activeCategories.clear();
   window.recorderApi?.clear?.();
   renderSearch(null);
   closeDrawer();
