@@ -13,6 +13,7 @@
     .logo { width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0; }
     button { border: 1px solid rgba(127,127,127,.35); border-radius: 6px; padding: 7px 11px; cursor: pointer; background: Canvas; color: CanvasText; }
     button.primary { font-weight: 700; }
+    button:disabled { cursor: default; opacity: .5; }
     .stats { display: flex; gap: 18px; margin: 12px 0; font-size: 12px; opacity: .85; }
     .hint { font-size: 12px; opacity: .7; margin-bottom: 10px; }
     .search-box { display: flex; gap: 8px; align-items: center; margin: 12px 0 8px; flex-wrap: wrap; }
@@ -145,6 +146,7 @@
     <input id="response-search" type="search" autocomplete="off" spellcheck="false" placeholder="同时搜索 URL 与 Response Body，例如 119.2595 / api/user" />
     <label><input id="case-sensitive" type="checkbox" /> 区分大小写</label>
     <button class="primary" id="search-response">搜索 URL + Response</button>
+    <button id="export-search" title="仅导出当前搜索结果中符合类型筛选的完整请求，按类型分类为 ZIP" disabled>仅导出搜索结果 ZIP</button>
     <button id="clear-search">清空搜索</button>
   </div>
   <div id="search-summary" class="search-summary">同时搜索当前已经抓取到内存中的 URL 与 Response Body，不重新请求网络。</div>
@@ -166,7 +168,7 @@
   </div>
 
   <div class="section-title">最近 100 条记录</div>
-  <div class="hint">导出包含全部记录（按类型分类为 ZIP）；下表只预览最近 100 条。点击任意行可查看完整请求详情。</div>
+  <div class="hint">顶部“一键导出分类 ZIP”包含全部记录；搜索栏可仅导出符合当前类型筛选的搜索结果。下表只预览最近 100 条。点击任意行可查看完整请求详情。</div>
   <table id="rows-table">
     <thead>
       <tr><th>Method</th><th>Status</th><th>Type</th><th>Req Body</th><th>Resp Body</th><th>URL</th></tr>

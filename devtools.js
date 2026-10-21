@@ -497,9 +497,9 @@
     }
   }
 
-  async function exportAll() {
+  async function exportRecords(selectedRecords, filenamePrefix) {
     const groups = new Map();
-    for (const record of records) {
+    for (const record of selectedRecords) {
       const cat = getNetworkCategory(record);
       if (!groups.has(cat)) groups.set(cat, []);
       groups.get(cat).push(record);
@@ -541,11 +541,20 @@
     const a = document.createElement("a");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     a.href = url;
-    a.download = `devtools-full-recorder-${stamp}.zip`;
+    a.download = `${filenamePrefix}-${stamp}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function exportAll() {
+    return exportRecords(records, "devtools-full-recorder");
+  }
+
+  function exportSearchResults(ids) {
+    const selectedIds = new Set(ids);
+    return exportRecords(records.filter((record) => selectedIds.has(record.id)), "devtools-full-recorder-search");
   }
 
   function sampleRows(limit = 100) {
@@ -670,6 +679,7 @@
     getRecord,
     clear,
     exportAll,
+    exportSearchResults,
     syncHAR
   };
 

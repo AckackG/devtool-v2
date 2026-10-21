@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DevTools Full Recorder",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Records DevTools network requests, filters by network type, inspects detailed headers and bodies, searches URLs and response bodies, and exports categorized ZIP archives. Images and WebSockets are excluded.",
   "devtools_page": "devtools.html",
   "permissions": ["webRequest"],

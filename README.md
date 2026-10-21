@@ -14,6 +14,7 @@
 - `Full Recorder` 面板可一键导出分类 ZIP（包含按 HTML、FETCH、XHR、JS、CSS 等 Network 类型分类好的 JSON），或手动清空。
 - 提供类似 DevTools Network 的类型筛选栏（ALL、FETCH、JS、HTML、CSS 等多选组合），列表与搜索结果会同步按所选类型过滤；搜索时类型标签显示命中数量，清空搜索后恢复显示总数量。
 - 支持对**已经抓取到内存中的 URL 与 Response Body**做全文子串搜索，不会重新请求网络；结果显示命中位置（URL / Response / URL + Response）、请求 URL、状态、MIME、命中次数和首个命中片段。
+- 搜索栏的“仅导出搜索结果 ZIP”可按当前类型筛选导出全部搜索命中的完整请求记录（包含 Request / Response Body，按 Network 类型分类），不受最近 100 条预览限制；无搜索结果时按钮禁用。
 - 面板可见时会定期从 HAR 补抓，避免个别请求因 `onRequestFinished` 漏报而缺失；也可以点击“同步 HAR”立即补抓。
 - 对于 Chrome DevTools 扩展 API 完全看不到的 XHR（例如由页面外挂脚本/其他扩展发起的请求），通过 `webRequest` 兜底捕获 URL、状态、响应头等元数据；这类记录没有响应体，详情里会明确标注。
 - 切换到其他 DevTools 面板时仍会后台接收并刷新记录；顶部“网络事件”计数可用于确认 Chrome 是否把网络完成事件推送给扩展。

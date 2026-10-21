@@ -7,6 +7,7 @@ let currentDrawerRecord = null;
 let lastRows = [];
 let lastSearchResult = null;
 let lastCategoryCounts = {};
+let searchExportInProgress = false;
 
 function matchesCategoryFilter(row) {
   if (activeCategories.size === 0) return true;
@@ -336,8 +337,14 @@ window.updateRecorderView = (stats, rows) => {
   refreshViews();
 };
 
+function visibleSearchResults() {
+  return (lastSearchResult?.results || []).filter(matchesCategoryFilter);
+}
+
 function renderSearch(result) {
   lastSearchResult = result || null;
+  const visibleResults = visibleSearchResults();
+  $("export-search").disabled = searchExportInProgress || visibleResults.length === 0;
   const section = $("search-section");
   const tbody = $("search-rows");
   tbody.textContent = "";
@@ -349,7 +356,6 @@ function renderSearch(result) {
   }
 
   section.classList.remove("hidden");
-  const visibleResults = (result.results || []).filter(matchesCategoryFilter);
   const visibleMatches = visibleResults.reduce((sum, row) => sum + Number(row.matchCount || 0), 0);
   const filterNote = activeCategories.size > 0
     ? `当前筛选显示 ${visibleResults.length.toLocaleString()} 个请求、${visibleMatches.toLocaleString()} 处命中。`
@@ -428,6 +434,26 @@ $("export").addEventListener("click", async () => {
   } finally {
     btn.disabled = false;
     btn.textContent = origText;
+  }
+});
+
+$("export-search").addEventListener("click", async () => {
+  const btn = $("export-search");
+  if (btn.disabled) return;
+  const ids = visibleSearchResults().map((row) => row.id);
+  if (ids.length === 0) return;
+  const originalText = btn.textContent;
+  searchExportInProgress = true;
+  btn.disabled = true;
+  btn.textContent = "正在导出 ZIP...";
+  try {
+    await window.recorderApi?.exportSearchResults?.(ids);
+  } catch (err) {
+    console.error("Search export failed:", err);
+  } finally {
+    searchExportInProgress = false;
+    btn.disabled = visibleSearchResults().length === 0;
+    btn.textContent = originalText;
   }
 });
 
